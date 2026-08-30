@@ -5,10 +5,13 @@ from datetime import datetime
 
 DB_FILE = os.environ.get("DB_FILE", "pretest_changes.db")
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+_POSTGRES_AVAILABLE = True  # Assume Postgres is available until proven otherwise
 
 
 def _is_postgres_enabled():
     """Return True when PostgreSQL is configured for deployment."""
+    if not _POSTGRES_AVAILABLE:
+        return False
     db_type = os.environ.get("DB_TYPE", "sqlite").lower()
     return db_type in {"postgres", "postgresql"} or bool(DATABASE_URL)
 
@@ -86,53 +89,88 @@ def _duplicate_error(exc):
 
 def init_database():
     """Initialize the database with required tables."""
+    global _POSTGRES_AVAILABLE
+    
+    # If Postgres is enabled but connection fails, fall back to SQLite
+    if _is_postgres_enabled():
+        try:
+            with _connection() as conn:
+                _init_db_tables(conn)
+            return
+        except Exception as exc:
+            # Log the error and fall back to SQLite
+            print(f"⚠️  Postgres connection failed: {exc}")
+            print("📌 Falling back to SQLite for this session")
+            print("   Ensure DATABASE_URL is set correctly in Streamlit Cloud secrets:")
+            print("   DB_TYPE=postgres")
+            print("   DATABASE_URL=postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres")
+            # Mark Postgres as unavailable for this session
+            _POSTGRES_AVAILABLE = False
+    
+    # Use SQLite as fallback
     with _connection() as conn:
-        cursor = conn.cursor()
-        pk_sql = _primary_key_sql()
+        _init_db_tables(conn)
 
-        cursor.execute(
-            _prepare_sql(
-                f'''
-                CREATE TABLE IF NOT EXISTS projects (
-                    project_id {pk_sql},
-                    project_name TEXT UNIQUE NOT NULL,
-                    created_date TIMESTAMP
-                )
-                '''
-            )
-        )
-        cursor.execute(
-            _prepare_sql(
-                f'''
-                CREATE TABLE IF NOT EXISTS pretest_changes (
-                    change_id {pk_sql},
-                    project_id INTEGER NOT NULL,
-                    run_id TEXT NOT NULL,
-                    tier TEXT NOT NULL,
-                    changes TEXT NOT NULL,
-                    change_date DATE NOT NULL,
-                    created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (project_id) REFERENCES projects(project_id)
-                )
-                '''
-            )
-        )
 
-        columns = _table_columns(conn)
-        if 'tier' not in columns:
+def _init_db_tables(conn):
+    """Create database tables and indexes."""
+    cursor = conn.cursor()
+    pk_sql = _primary_key_sql()
+
+    # Create tables first
+    cursor.execute(
+        _prepare_sql(
+            f'''
+            CREATE TABLE IF NOT EXISTS projects (
+                project_id {pk_sql},
+                project_name TEXT UNIQUE NOT NULL,
+                created_date TIMESTAMP
+            )
+            '''
+        )
+    )
+    cursor.execute(
+        _prepare_sql(
+            f'''
+            CREATE TABLE IF NOT EXISTS pretest_changes (
+                change_id {pk_sql},
+                project_id INTEGER NOT NULL,
+                run_id TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                changes TEXT NOT NULL,
+                change_date DATE NOT NULL,
+                created_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(project_id)
+            )
+            '''
+        )
+    )
+    
+    # Commit before checking columns
+    conn.commit()
+
+    # Now check and alter columns if needed
+    columns = _table_columns(conn)
+    if 'tier' not in columns:
+        try:
             if _is_postgres_enabled():
-                cursor.execute("ALTER TABLE pretest_changes ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT ''")
+                cursor.execute("ALTER TABLE pretest_changes ADD COLUMN tier TEXT DEFAULT ''")
             else:
                 cursor.execute('ALTER TABLE pretest_changes ADD COLUMN tier TEXT DEFAULT ""')
+            conn.commit()
+        except Exception:
+            pass  # Column may already exist
 
-        cursor.execute(
-            _prepare_sql(
-                '''
-                CREATE INDEX IF NOT EXISTS idx_pretest_changes_project_date
-                ON pretest_changes (project_id, change_date DESC, created_timestamp DESC)
-                '''
-            )
+    # Create index
+    cursor.execute(
+        _prepare_sql(
+            '''
+            CREATE INDEX IF NOT EXISTS idx_pretest_changes_project_date
+            ON pretest_changes (project_id, change_date DESC, created_timestamp DESC)
+            '''
         )
+    )
+    conn.commit()
 
 
 def get_all_projects():
