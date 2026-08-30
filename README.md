@@ -74,6 +74,49 @@ Open browser at `http://localhost:8501`
 - Python 3.8+
 - streamlit, pandas, openpyxl, plotly
 
+## ☁️ Deploy to Streamlit Cloud with Supabase
+
+This app stores project and pretest-change data in a database. For Streamlit Cloud, use a hosted PostgreSQL database instead of the local SQLite file so the data persists across app restarts and redeployments.
+
+### 1. Create a Supabase project
+
+1. Sign in to Supabase.
+2. Create a new project.
+3. Go to Settings → Database.
+4. Copy the PostgreSQL connection string.
+
+Typical format:
+
+```toml
+DB_TYPE = "postgres"
+DATABASE_URL = "postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
+```
+
+### 2. Add secrets in Streamlit Cloud
+
+In your Streamlit Cloud app dashboard:
+
+1. Open Settings → Secrets
+2. Add the following values:
+
+```toml
+DB_TYPE = "postgres"
+DATABASE_URL = "postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
+```
+
+### 3. Deploy the app
+
+1. Push the latest code to GitHub.
+2. Connect the repository to Streamlit Cloud.
+3. Deploy the app.
+4. Verify that the app loads without database errors.
+
+### 4. Notes
+
+- SQLite is fine for local development.
+- PostgreSQL is recommended for production and shared use.
+- The app automatically uses PostgreSQL when `DATABASE_URL` is configured.
+
 ## 🔄 Example Workflow
 
 1. Create project "Load Test v1"
