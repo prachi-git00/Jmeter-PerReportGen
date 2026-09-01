@@ -124,7 +124,7 @@ def _init_db_tables(conn):
             CREATE TABLE IF NOT EXISTS projects (
                 project_id {pk_sql},
                 project_name TEXT UNIQUE NOT NULL,
-                created_date TIMESTAMP
+                created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             '''
         )

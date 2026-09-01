@@ -74,6 +74,6 @@ def show_jtl_preview(
                 *[col for col in preview_summary.columns if col not in {"Transaction Name", "Iterations", "Pass", "Fail", "Pass %", "Throughput"}],
             ]
         ]
-        st.dataframe(preview_summary, use_container_width=True)
+        st.dataframe(preview_summary, width='stretch')
     except Exception as error:
         st.error(f"Unable to preview JTL data: {error}")

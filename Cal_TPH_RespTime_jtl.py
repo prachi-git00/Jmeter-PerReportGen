@@ -266,7 +266,7 @@ def calculate_response_jtl(
         summary["label"] = summary["Page"]
         summary.drop(columns=["Page", "label_key"], inplace=True)
         metric_columns = [column for column in summary.columns if column != "label"]
-        summary[metric_columns] = summary[metric_columns].fillna(0)
+        summary[metric_columns] = summary[metric_columns].fillna(0).infer_objects(copy=False)
 
     if not merged.empty:
         duration = (merged["timeStamp"].max() - merged["timeStamp"].min()).total_seconds()
