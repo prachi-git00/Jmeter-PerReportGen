@@ -39,21 +39,34 @@ from db_manager import (
 st.set_page_config(page_title="JMeter Performance Report Generator", page_icon="📊", layout="wide")
 st.title("📊 JMeter Performance Report Generator")
 
-
-st.download_button(
-    label="Download Sample Template",
-    data=create_sample_template(),
-    file_name="Sample_Template.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
+try:
+    template_data_bytes = create_sample_template()
+    st.download_button(
+        label="Download Sample Template",
+        data=template_data_bytes,
+        file_name="Sample_Template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+except Exception as e:
+    st.error(f"❌ Error creating sample template: {str(e)}")
 
 @st.cache_resource
 def initialize_database():
-    init_database()
-    return True
+    try:
+        init_database()
+        return True
+    except Exception as e:
+        print(f"❌ Database initialization error: {e}")
+        st.error(f"❌ Could not initialize database: {str(e)}")
+        return False
 
-
-initialize_database()
+try:
+    db_initialized = initialize_database()
+    if not db_initialized:
+        st.stop()
+except Exception as e:
+    st.error(f"❌ Application initialization failed: {str(e)}")
+    st.stop()
 
 st.sidebar.header("📁 Project Management")
 
@@ -314,55 +327,89 @@ if st.button("Generate Report"):
         wb.remove(wb.active)
 
         try:
-            # passfail_total_rows, grand_total_row, response_total_row = generate_jtl_summary_sheets(
-            #     wb,
-            #     jtl_files,
-            #     template_file,
-            #     from_date=from_dt,
-            #     to_date=to_dt,
-            #     pass_only=True,
-            #     data=jtl_data,
-            # )
-            result = generate_jtl_summary_sheets(
-                wb,
-                jtl_files,
-                template_file,
-                from_date=from_dt,
-                to_date=to_dt,
-                pass_only=True,
-                data=jtl_data,
-            )
+            # Generate JTL summary sheets with exception handling
+            try:
+                result = generate_jtl_summary_sheets(
+                    wb,
+                    jtl_files,
+                    template_file,
+                    from_date=from_dt,
+                    to_date=to_dt,
+                    pass_only=True,
+                    data=jtl_data,
+                )
+                passfail_total_rows, grand_total_row, response_total_row = result
+            except Exception as e:
+                st.error(f"❌ Error generating JTL summary sheets: {str(e)}")
+                raise
 
-            passfail_total_rows, grand_total_row, response_total_row = result
+            # Calculate throughput with exception handling
+            try:
+                avg_throughput = calculate_average_throughput(
+                    jtl_files,
+                    from_date=from_dt,
+                    to_date=to_dt,
+                    template=template_data,
+                    data=jtl_data,
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Could not calculate average throughput: {str(e)}")
+                avg_throughput = None
 
-            avg_throughput = calculate_average_throughput(
-                jtl_files,
-                from_date=from_dt,
-                to_date=to_dt,
-                template=template_data,
-                data=jtl_data,
-            )
-
+            # Process Pods and DB files with exception handling
             if Pods_and_DB_Count:
-                pods_db_paths = []
-                for uploaded_file in Pods_and_DB_Count:
-                    pods_db_path = os.path.join(temp_dir, uploaded_file.name)
-                    with open(pods_db_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    pods_db_paths.append(pods_db_path)
+                try:
+                    pods_db_paths = []
+                    for uploaded_file in Pods_and_DB_Count:
+                        try:
+                            pods_db_path = os.path.join(temp_dir, uploaded_file.name)
+                            with open(pods_db_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            pods_db_paths.append(pods_db_path)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not save file {uploaded_file.name}: {str(e)}")
+                            continue
 
-                podsServiceUtilization(pods_db_paths, wb)
-                DB_Server_Utilization(pods_db_paths, wb)
+                    if pods_db_paths:
+                        try:
+                            podsServiceUtilization(pods_db_paths, wb)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not process Pod Service Utilization: {str(e)}")
+                        
+                        try:
+                            DB_Server_Utilization(pods_db_paths, wb)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not process DB Server Utilization: {str(e)}")
+                except Exception as e:
+                    st.warning(f"⚠️ Error processing infrastructure files: {str(e)}")
 
-            Errors(wb)
-            PreTestChanges(wb, selected_project)
-            ExecutiveSummary(wb, RunID, passfail_total_rows, grand_total_row, response_total_row, avg_throughput)
+            # Add error sheet with exception handling
+            try:
+                Errors(wb)
+            except Exception as e:
+                st.warning(f"⚠️ Could not generate Errors sheet: {str(e)}")
 
-#=======File Name======================================
-            file_date = jtl_from_date.strftime("%d%m%Y")
-            report_file_name = ( f"{selected_project}_R{RunID}_LoadTestReport_{file_date}.xlsx" )
-            output_path = os.path.join(temp_dir, report_file_name)
-            wb.save(output_path)
+            # Add pretest changes sheet with exception handling
+            try:
+                PreTestChanges(wb, selected_project)
+            except Exception as e:
+                st.warning(f"⚠️ Could not add Pretest Changes sheet: {str(e)}")
+
+            # Generate executive summary with exception handling
+            try:
+                ExecutiveSummary(wb, RunID, passfail_total_rows, grand_total_row, response_total_row, avg_throughput)
+            except Exception as e:
+                st.warning(f"⚠️ Could not generate Executive Summary sheet: {str(e)}")
+
+            # Save workbook with exception handling
+            try:
+                file_date = jtl_from_date.strftime("%d%m%Y")
+                report_file_name = f"{selected_project}_R{RunID}_LoadTestReport_{file_date}.xlsx"
+                output_path = os.path.join(temp_dir, report_file_name)
+                wb.save(output_path)
+            except Exception as e:
+                st.error(f"❌ Error saving workbook: {str(e)}")
+                raise
 
             st.success("✅ JMeter Performance Report generated successfully!")
             with open(output_path, "rb") as f:
@@ -392,3 +439,5 @@ if st.button("Generate Report"):
                 )
         except Exception as e:
             st.error(f"❌ Report generation failed: {str(e)}")
+            import traceback
+            st.error(f"Debug traceback: {traceback.format_exc()}")

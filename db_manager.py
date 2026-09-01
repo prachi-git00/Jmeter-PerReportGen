@@ -175,25 +175,38 @@ def _init_db_tables(conn):
 
 def get_all_projects():
     """Get list of all projects."""
-    with _connection() as conn:
-        cursor = conn.execute(_prepare_sql('SELECT project_name FROM projects ORDER BY project_name'))
-        return [row[0] for row in cursor.fetchall()]
+    try:
+        with _connection() as conn:
+            cursor = conn.execute(_prepare_sql('SELECT project_name FROM projects ORDER BY project_name'))
+            return [row[0] for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"❌ Error retrieving projects: {e}")
+        return []
 
 
 def create_project(project_name):
     """Create a new project."""
-    with _connection() as conn:
-        try:
-            conn.execute(
-                _prepare_sql('INSERT INTO projects (project_name) VALUES (?)'),
-                (project_name,),
-            )
-            conn.commit()
-            return True
-        except Exception as exc:
-            if _duplicate_error(exc):
+    try:
+        if not project_name or not project_name.strip():
+            print("❌ Project name cannot be empty")
+            return False
+        with _connection() as conn:
+            try:
+                conn.execute(
+                    _prepare_sql('INSERT INTO projects (project_name) VALUES (?)'),
+                    (project_name.strip(),),
+                )
+                conn.commit()
+                return True
+            except Exception as exc:
+                if _duplicate_error(exc):
+                    print(f"❌ Project '{project_name}' already exists")
+                    return False
+                print(f"❌ Database error creating project: {exc}")
                 return False
-            raise
+    except Exception as e:
+        print(f"❌ Unexpected error in create_project: {e}")
+        return False
 
 
 def get_project_id(project_name):
@@ -208,47 +221,70 @@ def get_project_id(project_name):
 
 def add_pretest_change(project_name, run_id, tier, changes, change_date):
     """Add a new pretest change for a project."""
-    with _connection() as conn:
-        project = conn.execute(
-            _prepare_sql('SELECT project_id FROM projects WHERE project_name = ?'),
-            (project_name,),
-        ).fetchone()
-        if not project:
+    try:
+        if not all([project_name, run_id, tier, changes, change_date]):
+            print("❌ All fields are required for pretest change")
             return False, None
-        project_id = project[0]
-        is_duplicate = conn.execute(
-            _prepare_sql('''
-                SELECT 1 FROM pretest_changes
-                WHERE project_id = ? AND run_id = ?
-            '''),
-            (project_id, run_id),
-        ).fetchone() is not None
-        conn.execute(
-            _prepare_sql('''
-                INSERT INTO pretest_changes (project_id, run_id, tier, changes, change_date)
-                VALUES (?, ?, ?, ?, ?)
-            '''),
-            (project_id, run_id, tier, changes, change_date),
-        )
-        conn.commit()
-        return True, is_duplicate
+        with _connection() as conn:
+            try:
+                project = conn.execute(
+                    _prepare_sql('SELECT project_id FROM projects WHERE project_name = ?'),
+                    (project_name,),
+                ).fetchone()
+                if not project:
+                    print(f"❌ Project '{project_name}' not found")
+                    return False, None
+                project_id = project[0]
+                is_duplicate = conn.execute(
+                    _prepare_sql('''
+                        SELECT 1 FROM pretest_changes
+                        WHERE project_id = ? AND run_id = ?
+                    '''),
+                    (project_id, run_id),
+                ).fetchone() is not None
+                conn.execute(
+                    _prepare_sql('''
+                        INSERT INTO pretest_changes (project_id, run_id, tier, changes, change_date)
+                        VALUES (?, ?, ?, ?, ?)
+                    '''),
+                    (project_id, run_id, tier, changes, change_date),
+                )
+                conn.commit()
+                return True, is_duplicate
+            except Exception as e:
+                print(f"❌ Database error adding pretest change: {e}")
+                return False, None
+    except Exception as e:
+        print(f"❌ Unexpected error in add_pretest_change: {e}")
+        return False, None
 
 
 def update_pretest_change(project_name, run_id, tier, changes, change_date):
     """Update an existing pretest change identified by project and run_id."""
-    with _connection() as conn:
-        cursor = conn.execute(
-            _prepare_sql('''
-                UPDATE pretest_changes
-                SET tier = ?, changes = ?, change_date = ?
-                WHERE project_id = (
-                    SELECT project_id FROM projects WHERE project_name = ?
-                ) AND run_id = ?
-            '''),
-            (tier, changes, change_date, project_name, run_id),
-        )
-        conn.commit()
-        return cursor.rowcount > 0
+    try:
+        if not all([project_name, run_id, tier, changes, change_date]):
+            print("❌ All fields are required for updating pretest change")
+            return False
+        with _connection() as conn:
+            try:
+                cursor = conn.execute(
+                    _prepare_sql('''
+                        UPDATE pretest_changes
+                        SET tier = ?, changes = ?, change_date = ?
+                        WHERE project_id = (
+                            SELECT project_id FROM projects WHERE project_name = ?
+                        ) AND run_id = ?
+                    '''),
+                    (tier, changes, change_date, project_name, run_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except Exception as e:
+                print(f"❌ Database error updating pretest change: {e}")
+                return False
+    except Exception as e:
+        print(f"❌ Unexpected error in update_pretest_change: {e}")
+        return False
 
 
 def _parse_change_date(date_value):
@@ -279,32 +315,36 @@ def get_pretest_changes(project_name):
 
 def get_pretest_changes_filtered(project_name, run_id=None, tier=None, start_date=None, end_date=None):
     """Get pretest changes for a project filtered by Run ID, Tier, and/or date range."""
-    query = '''
-        SELECT run_id, tier, changes, change_date
-        FROM pretest_changes
-        WHERE project_id = (
-            SELECT project_id FROM projects WHERE project_name = ?
-        )
-    '''
-    params = [project_name]
+    try:
+        query = '''
+            SELECT run_id, tier, changes, change_date
+            FROM pretest_changes
+            WHERE project_id = (
+                SELECT project_id FROM projects WHERE project_name = ?
+            )
+        '''
+        params = [project_name]
 
-    if run_id:
-        query += ' AND run_id LIKE ?'
-        params.append(f'%{run_id}%')
-    if tier:
-        query += ' AND tier LIKE ?'
-        params.append(f'%{tier}%')
-    if start_date:
-        query += ' AND change_date >= ?'
-        params.append(start_date)
-    if end_date:
-        query += ' AND change_date <= ?'
-        params.append(end_date)
+        if run_id:
+            query += ' AND run_id LIKE ?'
+            params.append(f'%{run_id}%')
+        if tier:
+            query += ' AND tier LIKE ?'
+            params.append(f'%{tier}%')
+        if start_date:
+            query += ' AND change_date >= ?'
+            params.append(start_date)
+        if end_date:
+            query += ' AND change_date <= ?'
+            params.append(end_date)
 
-    query += ' ORDER BY date(change_date) DESC, created_timestamp DESC'
+        query += ' ORDER BY date(change_date) DESC, created_timestamp DESC'
 
-    with _connection() as conn:
-        return conn.execute(_prepare_sql(query), tuple(params)).fetchall()
+        with _connection() as conn:
+            return conn.execute(_prepare_sql(query), tuple(params)).fetchall()
+    except Exception as e:
+        print(f"❌ Error retrieving pretest changes: {e}")
+        return []
 
 
 def get_pretest_changes_as_dataframe(project_name):
