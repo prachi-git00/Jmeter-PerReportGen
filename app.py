@@ -333,8 +333,6 @@ if st.button("Generate Report"):
                 data=jtl_data,
             )
 
-            print("generate_jtl_summary_sheets returned:", result)
-
             passfail_total_rows, grand_total_row, response_total_row = result
 
             avg_throughput = calculate_average_throughput(
