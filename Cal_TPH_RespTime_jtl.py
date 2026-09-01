@@ -806,6 +806,9 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
 
     # Preserve common pages first, then the exact template Page order.
     response_summary = response_summary.copy()
+     # Keep API labels grouped after page labels while preserving alphabetical order within each group.
+    response_summary['__api_flag'] = response_summary['label'].astype(str).str.startswith('API')
+    response_summary = response_summary.sort_values(['__api_flag', 'label'], ascending=[True, True], kind='mergesort').drop(columns=['__api_flag'])
 
     response_df = pd.DataFrame({
         'Type': response_summary['Type'].astype(str).to_numpy(),
