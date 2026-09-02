@@ -1,12 +1,9 @@
-import pandas as pd
-from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.utils import get_column_letter
 
-HEADER_ROW = 23
-start_row = 4
-start_col = 2
+START_ROW = 4
+START_COL = 2
 
 # ARGB colors
 dark_header = PatternFill(start_color="FF44546A", end_color="FF44546A", fill_type="solid")
@@ -22,44 +19,35 @@ thin_border = Border(
     left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
 )
 
-thin_side = Side(style='thin')
+Cambria_font = Font(name="Cambria")
+no_fill = PatternFill(fill_type=None)
 
 # ================= EXECUTIVE SUMMARY =================
-def ExecutiveSummary(wb, RunID, passfail_total_rows, passfail_total_row, resTime_total_row, avg_throughput=None):
+def executive_summary(wb, run_id, passfail_total_rows, passfail_total_row, response_total_row, avg_throughput=None):
+    pass_ratio_row = None
     ws = wb.create_sheet(title="Executive Summary", index=0)
-
-    ws.column_dimensions['B'].width = 33
-    ws.column_dimensions['C'].width = 21
-    ws.column_dimensions['D'].width = 21
-    ws.column_dimensions['E'].width = 21
-    ws.column_dimensions['F'].width = 21
-    ws.row_dimensions[4].height = 40
-    ws.row_dimensions[5].height = 45
 
     def cell(r, c, val="", fill=None, font=None, align=center):
         x = ws.cell(row=r, column=c, value=val)
-        x.fill = fill if fill else PatternFill()
-        x.font = font if font else Font(name="Cambria")
+        x.fill = fill if fill else no_fill
+        x.font = font if font else Cambria_font
         x.alignment = align
         return x
 
     row = 2
     # Title
-    ws.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=start_col+4)
+    ws.merge_cells(start_row=row, start_column=START_COL, end_row=row, end_column=START_COL+4)
     cell(row, 2, "Executive Summary", dark_header, white_bold)
 
     passfail_ws = wb["PassFail"]
 
-#==============================================
     ui_total_row = passfail_total_rows[0]
     api_total_row = passfail_total_rows[1]
 
-#==================================================
-
     passfail_headers = {
-        passfail_ws.cell(row=start_row, column=column).value: column
-        for column in range(start_col, passfail_ws.max_column + 1)
-        if passfail_ws.cell(row=start_row, column=column).value is not None
+        passfail_ws.cell(row=START_ROW, column=column).value: column
+        for column in range(START_COL, passfail_ws.max_column + 1)
+        if passfail_ws.cell(row=START_ROW, column=column).value is not None
     }
     passfail_column = {
         name: get_column_letter(column)
@@ -72,24 +60,16 @@ def ExecutiveSummary(wb, RunID, passfail_total_rows, passfail_total_row, resTime
         }.items()
     }
 
-    # Rows
-    # print(f"in sheet 1 {passfail_total_row}")
     rows_data1 = [
-        ("Run ID", RunID, None),
+        ("Run ID", run_id, None),
         ("Test Description", "Load Test was Executed for ", None),
         ("Run Time", "\nPeak Duration:\nTotal Duration:", None),
         ("Scenario Included", f'=CONCAT("UI : ",TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Scenario"]}5:{passfail_column["Scenario"]}{ui_total_row-1}),CHAR(10),"API : ",TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Scenario"]}{ui_total_row+1}:{passfail_column["Scenario"]}{api_total_row}))', None),
-        # ("Scenario Included", f'=CONCAT("UI: ",TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Scenario"]}5:{passfail_column["Scenario"]}{passfail_total_rows[0]-1}),CHAR(10),"API: ",TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Scenario"]}5:{passfail_column["Scenario"]}{passfail_total_rows[1]-1}))', None),
-        # ("Scenario Included", f'=TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Scenario"]}5:{passfail_column["Scenario"]}{passfail_total_row})', None),
         ("Pre-Test Changes", "", None),
         ("Module", f'=TEXTJOIN(", ",TRUE,PassFail!{passfail_column["Module"]}5:{passfail_column["Module"]}{passfail_total_row})', None),
-        # ("Concurrent Users", f'=PassFail!{passfail_column["Users"]}{passfail_total_row-1}', None),
         ("Concurrent Users", f'=CONCAT("UI : ",TEXT(PassFail!{passfail_column["Users"]}{ui_total_row},"0"),",  ","API : ",TEXT(PassFail!{passfail_column["Users"]}{api_total_row},"0"),CHAR(10),"Total : ",TEXT(PassFail!{passfail_column["Users"]}{passfail_total_row},"0"))', None),
         ("TPH", "Achieved", None),
         ("", f'=CONCAT("UI : ",TEXT(PassFail!{passfail_column["TPH Achieved"]}{ui_total_row},"0"),",  ","API : ",TEXT(PassFail!{passfail_column["TPH Achieved"]}{api_total_row},"0"),CHAR(10),"Total : ",TEXT(PassFail!{passfail_column["TPH Achieved"]}{passfail_total_row},"0"))', None),
-        # # ("", f"=PassFail!{passfail_column['TPH Achieved']}{passfail_total_row}", None),
-        # ("", f'=TEXTJOIN(CHAR(10),TRUE,"UI : "&TEXT(PassFail!{passfail_column["TPH Achieved"]}{passfail_total_rows[0]},"0.00"),"API : "&TEXT(PassFail!{passfail_column["TPH Achieved"]}{passfail_total_rows[1]},"0.00"))', None),
-        # ("Pass Ratio %", f'=PassFail!{passfail_column["Pass%"]}{passfail_total_row}', None),
         ("Pass Ratio %", f'=CONCAT("UI : ",TEXT(PassFail!{passfail_column["Pass%"]}{ui_total_row},"0.00%"),",  ","API : ",TEXT(PassFail!{passfail_column["Pass%"]}{api_total_row},"0.00%"),CHAR(10),"Overall : ",TEXT(PassFail!{passfail_column["Pass%"]}{passfail_total_row},"0.00%"))', None),
         ("Throughput", "" if avg_throughput is None else (
             f"Avg: {avg_throughput['final_average_throughput_mbps']} Mbps, "
@@ -103,27 +83,30 @@ def ExecutiveSummary(wb, RunID, passfail_total_rows, passfail_total_row, resTime
         ("Response time @ 90th Percentile >=20 & <30 sec", "=ResponseTime!N6","=ResponseTime!O6"),
         ("", "SLA Status", None),
         ("Pass% >=99.99%", f'=IF(PassFail!{passfail_column["Pass%"]}{passfail_total_row}>=99.99%, "Met", "Not Met")', None),
-        ("Page/API Response time @ 90th Percentile < 3 sec", f'=IF(COUNTIF(ResponseTime!I5:I{resTime_total_row},">3")>0,"Not met","Met")', None),
+        ("Page/API Response time @ 90th Percentile < 3 sec", f'=IF(COUNTIF(ResponseTime!I5:I{response_total_row},">3")>0,"Not met","Met")', None),
         ("Infra Utilization <= 70%", "", None),
     ]
 
     for k, v, w in rows_data1:
         row += 1
-        cell(row, start_col, k, fill, bold)
+        cell(row, START_COL, k, fill, bold)
         if w is not None:
             ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=4)
             ws.merge_cells(start_row=row, start_column=5, end_row=row, end_column=6)
         else:
             ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=6)
 
-        print(v)
+        # print(v)
         if w is not None:
-            cell(row, start_col+1, v, font=bold)
-            cell(row, start_col+3, w, font=bold)
-        elif k in ["Run ID","Module","SLA Status","TPH","Throughput"] or v == "SLA Status":
-            cell(row, start_col+1, v, fill, bold)
+            cell(row, START_COL+1, v, font=bold)
+            cell(row, START_COL+3, w, font=bold)
+        elif k in ["Run ID","Module","TPH","Throughput"] or v == "SLA Status":
+            cell(row, START_COL+1, v, fill, bold)
         else:
-            cell(row, start_col+1, v)
+            cell(row, START_COL+1, v)
+
+        if k == "Pass Ratio %":
+            pass_ratio_row = row
 
     ws.merge_cells(start_row=10, start_column=2, end_row=11, end_column=2)
 
@@ -135,16 +118,20 @@ def ExecutiveSummary(wb, RunID, passfail_total_rows, passfail_total_row, resTime
 
     for k, u, v in rows_data2:
         row += 1
-        cell(row, start_col, k, fill, bold)
-        cell(row, start_col+1, u, fill, bold)
+        cell(row, START_COL, k, fill, bold)
+        cell(row, START_COL+1, u, fill, bold)
+        
+        if k == "MicroServices Utilization":
+            cell(row, START_COL+1, u, fill, bold)
+            cell(row, START_COL+3, v, fill, bold)
+        else:
+            cell(row, START_COL+1, u)
+            cell(row, START_COL+3, v)
+
         ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=4)
         ws.merge_cells(start_row=row, start_column=5, end_row=row, end_column=6)
-        if k == "MicroServices Utilization":
-            cell(row, start_col+1, u, fill, bold)
-            cell(row, start_col+3, v, fill, bold)
-        else:
-            cell(row, start_col+1, u)
-            cell(row, start_col+3, v)
+
+
     green_font = Font(name="Cambria", bold=True, color="FF27BB4A")
     red_font = Font(name="Cambria", bold=True, color="FFE20000")
 
@@ -169,14 +156,33 @@ def ExecutiveSummary(wb, RunID, passfail_total_rows, passfail_total_row, resTime
         CellIsRule(operator='equal', formula=['"Not Met"'], font=red_font)
     )
 
-    ws['C12'].number_format = '0.00%'
+    # ws['C12'].number_format = '0.00%'
+    ws.cell(pass_ratio_row, 3).number_format = "0.00%"
 
     row += 1
-    cell(row, start_col, "Test Conclusion", fill, bold)
+    cell(row, START_COL, "Test Conclusion", fill, bold)
     ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
     row += 1
-    cell(row, start_col, "")
+    cell(row, START_COL, "")
     ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+
+    ws.column_dimensions['B'].width = 33
+    ws.column_dimensions['C'].width = 21
+    ws.column_dimensions['D'].width = 21
+    ws.column_dimensions['E'].width = 21
+    ws.column_dimensions['F'].width = 21
+    
+    ROW_HEIGHTS = {
+        4: 40,
+        5: 45,
+        9: 30,
+        11: 30,
+        12: 30,
+        13: 17
+    }
+
+    for row_number, height in ROW_HEIGHTS.items():
+        ws.row_dimensions[row_number].height = height
 
     # Apply the complete Executive Summary table border in one place after all rows and merges exist.
     for table_row in range(2, row + 1):

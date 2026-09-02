@@ -14,7 +14,7 @@ dark_header = PatternFill(start_color="FF222B35", end_color="FF222B35", fill_typ
 start_row = 2
 start_col = 2
 
-def PreTestChanges(wb, project_name=None):
+def pretest_changes(wb, project_name=None):
     """Add Pretest Changes sheet to workbook with exception handling."""
     try:
         currsheet = wb.create_sheet(title='Pre Test changes', index=5)

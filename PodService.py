@@ -1,99 +1,18 @@
-# from openpyxl import load_workbook
-# from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-
-# center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-# bold = Font(name="Cambria", bold=True)
-# thin_border = Border(
-#     left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
-# )
-
-# def podsServiceUtilization(input_file_path, wb):
-#     if input_file_path is None:
-#         return
-
-#     input_paths = [input_file_path] if isinstance(input_file_path, str) else input_file_path
-#     matching_sheets = []
-#     for input_path in input_paths:
-#         input_wb = load_workbook(input_path)
-#         sheet_keywords = ('pods', 'infra', 'cpu utilization','App Server')
-#         matching_sheets.extend(
-#             input_wb[sheet_name]
-#             for sheet_name in input_wb.sheetnames
-#             if any(keyword in sheet_name.casefold() for keyword in sheet_keywords)
-#         )
-
-#     if not matching_sheets:
-#         return
-
-#     currsheet = wb.create_sheet(title='App Server Utilization', index=3)
-#     currsheet.sheet_view.showGridLines = False
-#     currsheet.column_dimensions['B'].width = 25
-#     currsheet.column_dimensions['I'].width = 25
-
-#     cell = currsheet.cell(row=2, column=2)
-#     cell.value = "App Services Pod Wise Utilization"
-#     cell.font = bold
-#     cell.alignment = Alignment(wrap_text=True)
-
-#     headers = ['','CPU Usage','CPU Requests','CPU Requests%','CPU Limits','CPU Limits%','','','Memory Usage','Memory Requests','Memory Requests%','Memory Limits','Memory Limits%','Memory Usage (RSS)','Memory Usage (Cache)','Memory Usage (Swap)']
-#     for i, header in enumerate(headers):
-#         cell = currsheet.cell(row=4, column=2 + i, value=header)
-#         cell.font = bold
-#         cell.border = thin_border
-#         cell.alignment = center
-
-#     output_row = 5
-
-#     for input_sheet in matching_sheets:
-#         for i, row in enumerate(input_sheet.iter_rows(min_row=4, values_only=True)):
-#             if i >= 200:
-#                 break
-#             for col_index, value in enumerate(row, start=1):
-#                 cell = currsheet.cell(row=output_row, column=col_index, value=value)
-#                 cell.font = Font(name="Cambria")
-
-#                 if col_index in [2,9]:
-#                     cell.alignment = Alignment(vertical="center", wrap_text=True)
-#                 else:
-#                     cell.alignment = Alignment(vertical="center", horizontal="center", wrap_text=True)
-
-#                 if col_index != 1:
-#                     cell.border = thin_border
-
-#             currsheet.row_dimensions[output_row].height = 28
-#             currsheet[f'E{output_row}'].number_format = '0.00%'
-#             currsheet[f'G{output_row}'].number_format = '0.00%'
-#             currsheet[f'L{output_row}'].number_format = '0.00%'
-#             currsheet[f'N{output_row}'].number_format = '0.00%'
-
-#             output_row += 1
-
-#     for col in ['C','D','E','F','G','H','J','K','L','M','N','O','P','Q']:
-#         currsheet.column_dimensions[col].width = 10
-
-#-===================== New Code ==========================
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.drawing.image import Image
 
 
-# ============================================================
-# Styles
-
 center = Alignment(horizontal="center",vertical="center",wrap_text=True)
-
 bold = Font(name="Cambria",bold=True)
-
 thin_border = Border(left=Side(style="thin"),right=Side(style="thin"),top=Side(style="thin"),bottom=Side(style="thin"))
 
 def cm_to_pixels(cm):
     # Convert centimeters to pixels.
-    # Used for resizing Excel images.
     return int(cm * 37.795)
 
 # Main Function
-
-def podsServiceUtilization(input_file_path, wb):
+def pods_service_utilization(input_file_path, wb):
 
     currsheet = wb.create_sheet(
         title='App Server Utilization',
@@ -113,11 +32,6 @@ def podsServiceUtilization(input_file_path, wb):
 
     if input_file_path is None:
         return
-
-    # Support:
-    #   input_file_path = "file.xlsx"
-    # or
-    #   input_file_path = ["file1.xlsx", "file2.xlsx"]
 
     input_paths = (
         [input_file_path]
@@ -144,25 +58,6 @@ def podsServiceUtilization(input_file_path, wb):
     if not matching_sheets:
         return
 
-    # Create output sheet
-
-    # currsheet = wb.create_sheet(
-    #     title='App Server Utilization',
-    #     index=3
-    # )
-
-    # currsheet.sheet_view.showGridLines = False
-
-    # cell = currsheet.cell(row=2, column=2)
-    # cell.value = "App Services Pod Wise Utilization"
-    # cell.font = bold
-    # cell.alignment = Alignment(wrap_text=True)
-
-    # # Column widths
-    # currsheet.column_dimensions['B'].width = 25
-    # currsheet.column_dimensions['I'].width = 25
-
-# --------------------------------------------------------
     # Header definition
     headers = [
         '',
@@ -183,22 +78,9 @@ def podsServiceUtilization(input_file_path, wb):
         'Memory Usage (Swap)'
     ]
 
-    # --------------------------------------------------------
-    # Output row
-    #
-    # Data starts at row 5 if table data exists.
-    # Images can start from the current output row.
-    # --------------------------------------------------------
-
     output_row = 5
 
-    # This ensures the title and headers are added only once
-    # and only if table data exists.
     headers_added = False
-
-    # ========================================================
-    # Process each matching input sheet
-    # ========================================================
 
     for input_sheet in matching_sheets:
 
@@ -206,19 +88,12 @@ def podsServiceUtilization(input_file_path, wb):
             f"Processing sheet: {input_sheet.title}"
         )
 
-        # ----------------------------------------------------
-        # Check whether this sheet has table data
-        #
-        # Data is expected to start from row 4.
-        # ----------------------------------------------------
-
         has_data = False
 
         for row in input_sheet.iter_rows(
             min_row=4,
             values_only=True
         ):
-
             if any(
                 value is not None
                 and str(value).strip() != ''
@@ -227,81 +102,43 @@ def podsServiceUtilization(input_file_path, wb):
                 has_data = True
                 break
 
-        # ----------------------------------------------------
-        # Get images from the input sheet
-        # ----------------------------------------------------
+     # Get images from the input sheet
+        images = getattr(input_sheet,'_images',[])
 
-        images = getattr(
-            input_sheet,
-            '_images',
-            []
-        )
+        print(f"  Table data: {has_data}")
+        print(f"  Images found: {len(images)}")
 
-        print(
-            f"  Table data: {has_data}"
-        )
-
-        print(
-            f"  Images found: {len(images)}"
-        )
-
-        # ====================================================
         # CASE 1:
         # Input sheet contains TABLE DATA
-        # ====================================================
-
         if has_data:
-
-            # ------------------------------------------------
-            # Add title and headers only once
-            # ------------------------------------------------
-
             if not headers_added:
 
                 # Title
-                title_cell = currsheet.cell(
-                    row=2,
-                    column=2
-                )
-
-                title_cell.value = (
-                    "App Services Pod Wise Utilization"
-                )
+                title_cell = currsheet.cell(row=2,column=2)
+                title_cell.value = ("App Services Pod Wise Utilization")
 
                 title_cell.font = bold
-
-                title_cell.alignment = Alignment(
-                    wrap_text=True
-                )
+                title_cell.alignment = Alignment(wrap_text=True)
 
                 # Headers
                 for i, header in enumerate(headers):
-
                     cell = currsheet.cell(
                         row=4,
                         column=2 + i,
                         value=header
                     )
-
                     cell.font = bold
                     cell.border = thin_border
                     cell.alignment = center
 
                 headers_added = True
 
-            # ------------------------------------------------
             # Copy table data
-            # ------------------------------------------------
-
+ 
             rows_written = 0
-
             for i, row in enumerate(
-                input_sheet.iter_rows(
-                    min_row=4,
-                    values_only=True
-                )
+                input_sheet.iter_rows(min_row=4,values_only=True)
             ):
-
                 # Maximum 200 rows
                 if i >= 200:
                     break
@@ -314,73 +151,31 @@ def podsServiceUtilization(input_file_path, wb):
                 ):
                     continue
 
-                # --------------------------------------------
                 # Copy each cell
-                # --------------------------------------------
-
-                for col_index, value in enumerate(
-                    row,
-                    start=1
-                ):
-
-                    cell = currsheet.cell(
-                        row=output_row,
-                        column=col_index,
-                        value=value
-                    )
-
-                    cell.font = Font(
-                        name="Cambria"
-                    )
+                for col_index, value in enumerate(row,start=1):
+                    cell = currsheet.cell(row=output_row,column=col_index,value=value)
+                    cell.font = Font(name="Cambria")
 
                     # Columns B and I
                     # are left aligned
                     if col_index in [2, 9]:
-
-                        cell.alignment = Alignment(
-                            vertical="center",
-                            wrap_text=True
-                        )
+                        cell.alignment = Alignment(vertical="center",wrap_text=True)
 
                     else:
-
-                        cell.alignment = Alignment(
-                            vertical="center",
-                            horizontal="center",
-                            wrap_text=True
-                        )
+                        cell.alignment = Alignment(vertical="center",horizontal="center",wrap_text=True)
 
                     # Don't put border on column A
                     if col_index != 1:
                         cell.border = thin_border
 
-                # --------------------------------------------
                 # Row height
-                # --------------------------------------------
+                currsheet.row_dimensions[output_row].height = 28
 
-                currsheet.row_dimensions[
-                    output_row
-                ].height = 28
-
-                # --------------------------------------------
                 # Percentage formatting
-                # --------------------------------------------
-
-                currsheet[
-                    f'E{output_row}'
-                ].number_format = '0.00%'
-
-                currsheet[
-                    f'G{output_row}'
-                ].number_format = '0.00%'
-
-                currsheet[
-                    f'L{output_row}'
-                ].number_format = '0.00%'
-
-                currsheet[
-                    f'N{output_row}'
-                ].number_format = '0.00%'
+                currsheet[f'E{output_row}'].number_format = '0.00%'
+                currsheet[f'G{output_row}'].number_format = '0.00%'
+                currsheet[f'L{output_row}'].number_format = '0.00%'
+                currsheet[f'N{output_row}'].number_format = '0.00%'
 
                 # Move to next row
                 output_row += 1
@@ -390,93 +185,40 @@ def podsServiceUtilization(input_file_path, wb):
                 f"  Rows copied: {rows_written}"
             )
 
-        # ====================================================
         # CASE 2:
         # Input sheet contains IMAGES
-        # ====================================================
-
         if images:
-
-            # ------------------------------------------------
-            # Images are placed after the table.
-            #
-            # If there was no table, they are placed at the
-            # current output row.
-            #
-            # +2 gives a small gap between table and image.
-            # ------------------------------------------------
-
+            # Images are placed after the table.If there was no table, they are placed at the current output row.
+            
             image_row = output_row + 2
-
-            for image_index, image in enumerate(
-                images,
-                start=1
-            ):
-
-                # --------------------------------------------
+            for image_index, image in enumerate(images,start=1):
                 # Create a new image object
-                # --------------------------------------------
-
                 try:
-
-                    new_img = Image(
-                        image.ref
-                    )
-
+                    new_img = Image(mage.ref)
                 except Exception:
+                    new_img = Image(image._data())
 
-                    new_img = Image(
-                        image._data()
-                    )
-
-                # --------------------------------------------
                 # Resize image
-                # --------------------------------------------
-
                 new_img.width = cm_to_pixels(24)
                 new_img.height = cm_to_pixels(12)
 
-                # --------------------------------------------
                 # Image position
-                # --------------------------------------------
 
-                image_position = (
-                    f"B{image_row}"
-                )
-
-                currsheet.add_image(
-                    new_img,
-                    image_position
-                )
-
+                image_position = (f"B{image_row}")
+                currsheet.add_image(new_img,image_position)
                 print(
                     f"  Image {image_index} "
                     f"placed at {image_position}"
                 )
 
-                # --------------------------------------------
                 # Move down for next image
-                #
                 # 26 rows gives enough vertical space for
                 # a 12 cm image.
-                # --------------------------------------------
-
                 image_row += 26
-
-            # ------------------------------------------------
-            # Update output_row.
-            #
-            # This is VERY IMPORTANT when there are multiple
-            # input sheets, otherwise the next sheet could
-            # overlap the previous sheet's images.
-            # ------------------------------------------------
 
             output_row = image_row + 1
 
-    # ========================================================
     # Column widths
-    # ========================================================
-
     for col in [
         'C',
         'D',
@@ -493,16 +235,7 @@ def podsServiceUtilization(input_file_path, wb):
         'P',
         'Q'
     ]:
+        currsheet.column_dimensions[col].width = 10
 
-        currsheet.column_dimensions[
-            col
-        ].width = 10
-
-    # ========================================================
-    # Finished
-    # ========================================================
-
-    print(
-        "App Server Utilization sheet created successfully."
-    )
+    print("App Server Utilization sheet created successfully.")
 

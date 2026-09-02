@@ -6,12 +6,11 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.utils import get_column_letter
 
-HEADER_ROW = 23
 start_row = 4
 start_col = 2
 
 # ARGB colors
-dark_header = PatternFill(start_color="FF4A4A98", end_color="FF4A4A98", fill_type="solid")
+# dark_header = PatternFill(start_color="FF4A4A98", end_color="FF4A4A98", fill_type="solid")
 fill = PatternFill(start_color="FFCCCCFF", end_color="FFCCCCFF", fill_type="solid")
 Header_fill = PatternFill(start_color="FF203764", end_color="FF203764", fill_type="solid")
 highlight_90 = PatternFill(start_color="FFFFC7CE", end_color="FFFFC7CE", fill_type="solid")
@@ -24,9 +23,6 @@ left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 thin_border = Border(
     left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin')
 )
-
-thin_side = Side(style='thin')
-
 
 def _merge_consecutive_cells(ws, values, column, first_row):
     """Merge adjacent worksheet cells when their source values are identical."""
@@ -286,7 +282,8 @@ def calculate_response_jtl(
             summary["label"] = summary["Page"]
             summary.drop(columns=["Page", "label_key"], inplace=True)
             metric_columns = [column for column in summary.columns if column != "label"]
-            summary[metric_columns] = summary[metric_columns].fillna(0).infer_objects(copy=False)
+            # summary[metric_columns] = summary[metric_columns].fillna(0).infer_objects(copy=False)
+            summary[metric_columns] = (summary[metric_columns].infer_objects(copy=False).fillna(0))
 
         if not merged.empty:
             duration = (merged["timeStamp"].max() - merged["timeStamp"].min()).total_seconds()
@@ -315,9 +312,8 @@ def calculate_average_throughput(jtl_files, from_date=None, to_date=None, templa
             missing = ", ".join(sorted(missing_columns))
             raise ValueError(f"JTL file does not contain required throughput column(s): {missing}.")
 
-        # Count only successful transactions in the throughput totals.
         throughput_data = throughput_data[
-            throughput_data["success"].astype(str).str.strip().str.lower() == "true"
+            throughput_data["success_bool"]
         ]
 
         if from_date is not None:
@@ -349,8 +345,8 @@ def calculate_average_throughput(jtl_files, from_date=None, to_date=None, templa
                 throughput_data["label_key"].isin(template_keys)
             ]
 
-        peak_start = pd.to_datetime(from_date) if from_date is not None else None
-        peak_end = pd.to_datetime(to_date) if to_date is not None else None
+        peak_start = from_date if from_date is not None else None
+        peak_end = to_date if to_date is not None else None
         if peak_end is not None and peak_end.time() == pd.Timestamp("1900-01-01 00:00:00").time():
             peak_end += pd.Timedelta(days=1)
 
@@ -380,10 +376,11 @@ def calculate_average_throughput(jtl_files, from_date=None, to_date=None, templa
             bytes_sent = pd.to_numeric(throughput_data["sentBytes"], errors="coerce").fillna(0).sum()
             received_kb_sec = bytes_received / duration_sec / 1024 if duration_sec > 0 else 0.0
             sent_kb_sec = bytes_sent / duration_sec / 1024 if duration_sec > 0 else 0.0
+
             throughput_data["total_bytes"] = (
-                pd.to_numeric(throughput_data["bytes"], errors="coerce").fillna(0)
-                + pd.to_numeric(throughput_data["sentBytes"], errors="coerce").fillna(0)
+                throughput_data["bytes"] + throughput_data["sentBytes"]
             )
+
             one_second_totals = throughput_data.groupby(
                 throughput_data["timeStamp"].dt.floor("s")
             )["total_bytes"].sum()
@@ -420,7 +417,7 @@ def calculate_average_throughput(jtl_files, from_date=None, to_date=None, templa
 calculate_performance_report = calculate_response_jtl
 
 
-def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to_date=None, pass_only=False, keywords=None, data=None):
+def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to_date=None, data=None):
     """Populate workbook with PassFail and ResponseTime sheets derived from JTL input."""
     template = template_file if isinstance(template_file, pd.DataFrame) else _load_template(template_file)
     data = data if data is not None else load_jtl_data(jtl_files)
@@ -475,19 +472,33 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     ]
     for field in extra_passfail_columns:
         passfail_summary[field] = passfail_summary["label"].map(template_lookup[field]).fillna("")
-    template_order = {page: index for index, page in enumerate(template["Page"])}
-    response_summary = response_summary.assign(
-        __common=response_summary["label"].map(_normalize_label).isin(common_page_keys),
-        __template_order=response_summary["label"].map(template_order),
-    ).sort_values(["__common", "__template_order"], ascending=[False, True], kind="stable").drop(
-        columns=["__common", "__template_order"]
-    ).reset_index(drop=True)
+
+    # template_order = {page: index for index, page in enumerate(template["Page"])}
+    template_order = {
+        _normalize_label(page): index
+        for index, page in enumerate(template["Page"])
+    }
+
+    response_summary = (
+        response_summary.assign(
+            __template_order=response_summary["label"].map(
+                lambda value: template_order.get(
+                    _normalize_label(value),
+                    float("inf"),
+                )
+            )
+        )
+        .sort_values("__template_order", kind="stable")
+        .drop(columns="__template_order")
+        .reset_index(drop=True)
+    )
+
     passfail_summary = passfail_summary.assign(
         __template_order=passfail_summary["label"].map(template_order)
     ).sort_values("__template_order", kind="stable").drop(columns="__template_order").reset_index(drop=True)
 
     response_by_label = response_summary.set_index('label')['Samples']
-    passfail_by_label = passfail_summary.set_index('label')['Samples']
+    # passfail_by_label = passfail_summary.set_index('label')['Samples']
 
     if from_date is not None and to_date is not None:
         start_dt = pd.to_datetime(from_date)
@@ -497,7 +508,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         peak_duration_min = 1.0
 
 # PassFail sheet: create the report layout and write transaction-level counts and formulas.
-#==================================================================================
     passfail_ws = wb.create_sheet(title='PassFail', index=1)
     passfail_ws['B2'] = 'Pass Fail:'
     passfail_ws['B2'].font = Font(name='Cambria', bold=True, underline='single')
@@ -520,10 +530,13 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     passfail_df['Users'] = passfail_summary['Users'].map(
         lambda v: 0 if pd.isna(v) or not str(v).strip() else v
     ) if 'Users' in passfail_summary.columns else 0
+
     passfail_df['Iterations'] = passfail_summary['Samples'].astype(int)
+
     passfail_df['Pass'] = response_by_label.reindex(
         passfail_summary['label']
     ).fillna(0).astype(int).to_numpy()
+
     passfail_df['Fail'] = 0
     passfail_df['Pass%'] = ''
     passfail_df['TPH Achieved'] = ''
@@ -708,7 +721,7 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
                     data_start_row
                 )
 
-        # _merge_consecutive_cells(passfail_ws, passfail_df['Target TPH'].tolist(), start_col + passfail_df.columns.get_loc('Target TPH'), data_start_row)
+    # _merge_consecutive_cells(passfail_ws, passfail_df['Target TPH'].tolist(), start_col + passfail_df.columns.get_loc('Target TPH'), data_start_row)
 
         passfail_ws.merge_cells(
             start_row=data_start_row,
@@ -760,12 +773,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         f'=IFERROR({pass_letter}{grand_total_row}*60/{duration_letter}{start_row + 1},0)'
     )
 
-    # passfail_ws.cell(
-    #     grand_total_row,
-    #     start_col + target_tph_col,
-    #     f'=SUM({target_tph_letter}{start_row + 1}:{target_tph_letter}{grand_total_row - 1})'
-    # )
-
     target_tph_refs = '+'.join(
         f'{target_tph_letter}{row}'
         for row in passfail_total_rows
@@ -776,8 +783,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         start_col + target_tph_col,
         f'={target_tph_refs}' if target_tph_refs else '=0'
     )
-
-#==============================================
 
     passfail_ws.cell(
         grand_total_row,
@@ -791,7 +796,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         cell.fill = fill
         cell.alignment = center
 
-#==========================================================================================
 # ResponseTime sheet: write successful transaction timing statistics and percentile results.
 
     response_ws = wb.create_sheet(title='ResponseTime', index=2)
@@ -804,11 +808,7 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     cell.value = 'Page Response Time in seconds: (Only successful transactions)'
     cell.font = Font(name='Cambria', bold=True, underline='single')
 
-    # Preserve common pages first, then the exact template Page order.
-    response_summary = response_summary.copy()
-     # Keep API labels grouped after page labels while preserving alphabetical order within each group.
-    response_summary['__api_flag'] = response_summary['label'].astype(str).str.startswith('API')
-    response_summary = response_summary.sort_values(['__api_flag', 'label'], ascending=[True, True], kind='mergesort').drop(columns=['__api_flag'])
+    # response_summary = response_summary.copy()
 
     response_df = pd.DataFrame({
         'Type': response_summary['Type'].astype(str).to_numpy(),
@@ -861,8 +861,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     for row in range(start_row + 1, start_row + len(response_df) + 1):
         response_ws.cell(row=row, column=start_col + 2).alignment = center
 
-#=====================================================================================
-
     # Locate the 90th-percentile column so threshold highlighting and counts remain column-independent.
     response_total_row = len(response_df) + start_row
     ninety_col_letter = None
@@ -884,8 +882,7 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         ('>=5 & <10', '5', '10'),
         ('>=10 & <20', '10', '20'),
         ('>=20 & <30', '20', '30'),
-        #======
-        ('Total >=1', '1', '50'),
+        ('Total >=1', '1', None),
     ]
     for column_offset, header in enumerate(headers):
         header_cell = response_ws.cell(row=1, column=13 + column_offset, value=header)
@@ -922,10 +919,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
             response_ws.cell(row=row_offset, column=14, value=f'={total_count_formula}-O{row_offset}')
             response_ws.cell(row=row_offset, column=15, value=f'={api_count_formula}')
             response_ws.cell(row=row_offset, column=16, value=f'=N{row_offset}+O{row_offset}')
-
-            #Total Count for UI and API Greater than equal to 1
-            # response_ws.cell(row=row_offset, column=15, value=f'={api_count_formula}')
-            # response_ws.cell(row=row_offset, column=16, value=f'=N{row_offset}+O{row_offset}')
 
     for row in range(2, 2 + len(scenario_ranges)):
         for column in range(13, 17):

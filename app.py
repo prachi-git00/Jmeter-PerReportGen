@@ -2,13 +2,10 @@ import os
 import tempfile
 from io import BytesIO
 from datetime import date, datetime, timedelta
+import traceback
 
-# import pandas as pd
 import streamlit as st
 from openpyxl import Workbook
-from openpyxl.formatting.rule import CellIsRule
-# from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 from Sample_template import create_sample_template
 
 from Cal_TPH_RespTime_jtl import (
@@ -19,10 +16,10 @@ from Cal_TPH_RespTime_jtl import (
 )
 from DB_Server import DB_Server_Utilization
 from Errors import Errors
-from ExeSummary import ExecutiveSummary
+from ExeSummary import executive_summary
 from JTLPreview import show_jtl_preview
-from PodService import podsServiceUtilization
-from PreTestChanges import PreTestChanges
+from PodService import pods_service_utilization
+from PreTestChanges import pretest_changes
 
 from db_manager import (
     add_pretest_change,
@@ -35,6 +32,21 @@ from db_manager import (
     update_pretest_change,
 )
 
+def parse_date(value, default=None):
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    if value:
+        for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(str(value), fmt).date()
+            except ValueError:
+                pass
+
+    return default
 
 st.set_page_config(page_title="JMeter Performance Report Generator", page_icon="📊", layout="wide")
 st.title("📊 JMeter Performance Report Generator")
@@ -60,22 +72,18 @@ def initialize_database():
         st.error(f"❌ Could not initialize database: {str(e)}")
         return False
 
-try:
-    db_initialized = initialize_database()
-    if not db_initialized:
-        st.stop()
-except Exception as e:
-    st.error(f"❌ Application initialization failed: {str(e)}")
+if not initialize_database():
     st.stop()
 
 st.sidebar.header("📁 Project Management")
 
 with st.sidebar.expander("➕ Create New Project"):
     new_project_name = st.text_input("Project Name")
+    project_name = new_project_name.strip()
     if st.button("Create Project"):
-        if new_project_name.strip():
-            if create_project(new_project_name):
-                st.success(f"✅ Project '{new_project_name}' created!")
+        if project_name:
+            if create_project(project_name):
+                st.success(f"✅ Project '{project_name}' created!")
             else:
                 st.error(f"❌ Project '{new_project_name}' already exists!")
         else:
@@ -104,11 +112,15 @@ if selected_project:
                 else:
                     st.error("Please confirm the project deletion first")
 
-if 'edit_run_id' not in st.session_state:
-    st.session_state.edit_run_id = None
-    st.session_state.edit_tier = ''
-    st.session_state.edit_changes = ''
-    st.session_state.edit_date = None
+defaults = {
+    "edit_run_id": None,
+    "edit_tier": "",
+    "edit_changes": "",
+    "edit_date": None,
+}
+
+for key, value in defaults.items():
+    st.session_state.setdefault(key, value)
 
 if selected_project:
     st.sidebar.header("📝 Pretest Changes")
@@ -275,20 +287,21 @@ def get_cached_jtl_data(file_payloads):
 def get_cached_template(template_payload):
     return load_template(BytesIO(template_payload))
 
-
 jtl_data = None
 if jtl_files:
     try:
-        jtl_data = get_cached_jtl_data(tuple(file.getvalue() for file in jtl_files))
-    except Exception:
-        pass
+        jtl_data = get_cached_jtl_data(
+            tuple(file.getvalue() for file in jtl_files)
+        )
+    except Exception as e:
+        st.warning(f"⚠️ Could not load JTL data: {e}")
 
 template_data = None
 if template_file:
     try:
         template_data = get_cached_template(template_file.getvalue())
-    except Exception:
-        pass
+    except Exception as e:
+        st.warning(f"⚠️ Could not load transaction template: {e}")
 
 if jtl_files:
     with st.expander("📊 Preview JTL Summary", expanded=True):
@@ -335,7 +348,7 @@ if st.button("Generate Report"):
                     template_file,
                     from_date=from_dt,
                     to_date=to_dt,
-                    pass_only=True,
+                    # pass_only=True,
                     data=jtl_data,
                 )
                 passfail_total_rows, grand_total_row, response_total_row = result
@@ -358,30 +371,29 @@ if st.button("Generate Report"):
 
             # Process Pods and DB files with exception handling
             if Pods_and_DB_Count:
-                try:
-                    pods_db_paths = []
-                    for uploaded_file in Pods_and_DB_Count:
-                        try:
-                            pods_db_path = os.path.join(temp_dir, uploaded_file.name)
-                            with open(pods_db_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                            pods_db_paths.append(pods_db_path)
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not save file {uploaded_file.name}: {str(e)}")
-                            continue
+                
+                pods_db_paths = []
+                for uploaded_file in Pods_and_DB_Count:
+                    try:
+                        pods_db_path = os.path.join(temp_dir, uploaded_file.name)
+                        with open(pods_db_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        pods_db_paths.append(pods_db_path)
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not save file {uploaded_file.name}: {str(e)}")
+                        continue
 
-                    if pods_db_paths:
-                        try:
-                            podsServiceUtilization(pods_db_paths, wb)
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not process Pod Service Utilization: {str(e)}")
+                if pods_db_paths:
+                    try:
+                        pods_service_utilization(pods_db_paths, wb)
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not process Pod Service Utilization: {str(e)}")
                         
-                        try:
-                            DB_Server_Utilization(pods_db_paths, wb)
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not process DB Server Utilization: {str(e)}")
-                except Exception as e:
-                    st.warning(f"⚠️ Error processing infrastructure files: {str(e)}")
+                    try:
+                        DB_Server_Utilization(pods_db_paths, wb)
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not process DB Server Utilization: {str(e)}")
+                
 
             # Add error sheet with exception handling
             try:
@@ -391,53 +403,52 @@ if st.button("Generate Report"):
 
             # Add pretest changes sheet with exception handling
             try:
-                PreTestChanges(wb, selected_project)
+                pretest_changes(wb, selected_project)
             except Exception as e:
                 st.warning(f"⚠️ Could not add Pretest Changes sheet: {str(e)}")
 
             # Generate executive summary with exception handling
             try:
-                ExecutiveSummary(wb, RunID, passfail_total_rows, grand_total_row, response_total_row, avg_throughput)
+                executive_summary(wb, RunID, passfail_total_rows, grand_total_row, response_total_row, avg_throughput)
             except Exception as e:
                 st.warning(f"⚠️ Could not generate Executive Summary sheet: {str(e)}")
 
             # Save workbook with exception handling
-            try:
-                file_date = jtl_from_date.strftime("%d%m%Y")
-                report_file_name = f"{selected_project}_R{RunID}_LoadTestReport_{file_date}.xlsx"
-                output_path = os.path.join(temp_dir, report_file_name)
-                wb.save(output_path)
-            except Exception as e:
-                st.error(f"❌ Error saving workbook: {str(e)}")
-                raise
-
+            file_date = jtl_from_date.strftime("%d%m%Y")
+            report_file_name = f"{selected_project}_R{RunID}_LoadTestReport_{file_date}.xlsx"
+            output_path = os.path.join(temp_dir, report_file_name)
+            wb.save(output_path)
+            
             st.success("✅ JMeter Performance Report generated successfully!")
+
+            st.markdown(
+                """
+                <style>
+                div[data-testid="stDownloadButton"] button {
+                    color: #000000;
+                    background-color: #ffffff;
+                    font-weight: 1000;
+                    transition: background-color 0.15s ease;
+                }
+                div[data-testid="stDownloadButton"] button:hover {
+                    color: #000000;
+                    background-color: #E0E0E0;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
             with open(output_path, "rb") as f:
-                st.markdown(
-                    """
-                    <style>
-                    div[data-testid="stDownloadButton"] button {
-                        color: #000000;
-                        background-color: #ffffff;
-                        font-weight: 1000;
-                        transition: background-color 0.15s ease;
-                    }
-                    div[data-testid="stDownloadButton"] button:hover {
-                        color: #000000;
-                        background-color: #E0E0E0;
-                    }
-                    </style>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                report_data = f.read()
                 st.download_button(
                     label="📥 Download JMeter Report",
-                    data=f.read(),
+                    data=report_data,
                     file_name=report_file_name,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     type="secondary",
                 )
+
         except Exception as e:
             st.error(f"❌ Report generation failed: {str(e)}")
-            import traceback
             st.error(f"Debug traceback: {traceback.format_exc()}")

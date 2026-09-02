@@ -24,17 +24,17 @@ try:
     from Errors import Errors
     print("[OK] Errors import OK")
     
-    from ExeSummary import ExecutiveSummary
+    from ExeSummary import executive_summary
     print("[OK] ExeSummary import OK")
     
     from JTLPreview import show_jtl_preview
     print("[OK] JTLPreview import OK")
     
-    from PodService import podsServiceUtilization
+    from PodService import pods_service_utilization
     print("[OK] PodService import OK")
     
-    from PreTestChanges import PreTestChanges
-    print("[OK] PreTestChanges import OK")
+    from PreTestChanges import pretest_changes
+    print("[OK] pretest_changes import OK")
     
     from db_manager import (
         add_pretest_change,
