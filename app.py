@@ -253,21 +253,36 @@ template_file = st.file_uploader(
 jtl_col1, jtl_col2 = st.columns(2)
 with jtl_col1:
     jtl_from_date = st.date_input("JTL From Date", value=date.today(), key="jtl_from_date")
-    jtl_from_time = st.time_input(
+    jtl_from_time = st.text_input(
         "JTL From Time",
-        value=datetime.now().time(),
+        value=datetime.now().strftime("%H:%M"),
         key="jtl_from_time",
-        step=timedelta(minutes=1),
+        placeholder="HH:MM"
     )
+    try:
+        jtl_from_time = datetime.strptime(
+            jtl_from_time, "%H:%M"
+        ).time()
+
+    except ValueError:
+        st.error("Please enter date as DD-MM-YYYY and time as HH:MM")
+
 
 with jtl_col2:
     jtl_to_date = st.date_input("JTL To Date", value=date.today(), key="jtl_to_date")
-    jtl_to_time = st.time_input(
+    jtl_to_time = st.text_input(
         "JTL To Time",
-        value=datetime.now().time(),
+        value=datetime.now().strftime("%H:%M"),
         key="jtl_to_time",
-        step=timedelta(minutes=1),
+        placeholder="HH:MM"
     )
+    try:
+        jtl_to_time = datetime.strptime(
+            jtl_to_time, "%H:%M"
+        ).time()
+
+    except ValueError:
+        st.error("Please enter date as DD-MM-YYYY and time as HH:MM")
 
 Pods_and_DB_Count = st.file_uploader(
     "Upload Pods Excel / DB Count Screenshot",

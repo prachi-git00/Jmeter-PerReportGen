@@ -424,6 +424,7 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     response_summary = calculate_response_jtl(
         jtl_files, from_date, to_date, True, template=template, data=data
     )
+    passfail_pass_summary = response_summary.copy()
     common_page_keys = _common_page_keys(template)
     if common_page_keys:
         common_response_summary = calculate_response_jtl(
@@ -456,9 +457,6 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
     template_lookup = template.set_index("Page")
     passfail_summary = passfail_summary[
         passfail_summary["label"].map(template_lookup["Yes/No"]).eq("yes")
-    ].copy()
-    passfail_summary = passfail_summary[
-        ~passfail_summary["label"].map(_normalize_label).isin(common_page_keys)
     ].copy()
     for field in ("Type", "Module", "Scenario", "Target TPH"):
         response_summary[field] = response_summary["label"].map(template_lookup[field]).fillna("")
@@ -497,7 +495,7 @@ def generate_jtl_summary_sheets(wb, jtl_files, template_file, from_date=None, to
         __template_order=passfail_summary["label"].map(template_order)
     ).sort_values("__template_order", kind="stable").drop(columns="__template_order").reset_index(drop=True)
 
-    response_by_label = response_summary.set_index('label')['Samples']
+    response_by_label = passfail_pass_summary.set_index('label')['Samples']
     # passfail_by_label = passfail_summary.set_index('label')['Samples']
 
     if from_date is not None and to_date is not None:

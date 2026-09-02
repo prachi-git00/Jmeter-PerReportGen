@@ -32,8 +32,9 @@ Open browser at `http://localhost:8501`
 1. **Create Project** - Set up a new test project
 2. **Download Template** - Click "Download Sample Template" button
 3. **Fill Template** - Add transaction mappings (Type, Module, Scenario, Page, Yes/No, Target TPH)
-    Note: Jtl transction and template transaction/pages name must match.
-          Yes/No column is for the Transaction to be included in passFail sheet.
+        Note: JTL transaction and template transaction/page names must match.
+            The Yes/No column controls whether the transaction is included in the PassFail sheet.
+            This applies to common pages as well; common-page status does not override Yes/No.
 4. **Upload Files** - Add JTL files and transaction template
 5. **Set Time Window** - Select peak test period (From/To dates)
 6. **Generate Report** - Click "Generate Report" and download Excel file
@@ -53,7 +54,7 @@ Open browser at `http://localhost:8501`
 | Common Pages* | Full JTL duration | ✓ Yes |
 | PassFail Analysis | Peak window | All samples |
 
-*Mark common pages by adding "Common" in Module or Scenario column
+*Common pages use the full JTL duration for ResponseTime metrics. Their PassFail inclusion is controlled only by the template Yes/No column.
 
 ## 💾 Template Columns
 
@@ -66,7 +67,8 @@ Open browser at `http://localhost:8501`
 ## ⚙️ Configuration
 
 - **From/To Date/Time**: Peak test window for regular transactions
-- **Common Pages**: Detected by "common" keyword in Module/Scenario - appear first in report, excluded from PassFail
+- **Common Pages**: Detected by the "common" keyword in Module/Scenario and analyzed over the full JTL duration in ResponseTime
+- **PassFail inclusion**: Controlled only by the template `Yes/No` column; `Yes` includes the transaction and `No` excludes it
 - **Template Match**: JTL labels must match "Page" column (case-insensitive)
 
 ## 📝 Requirements
@@ -76,7 +78,7 @@ Open browser at `http://localhost:8501`
 
 ## ☁️ Deploy to Streamlit Cloud with Supabase
 
-This app stores project and pretest-change data in a database. For Streamlit Cloud, use a hosted PostgreSQL database instead of the local SQLite file so the data persists across app restarts and redeployments.
+This app stores project and pre-test change data in PostgreSQL. Configure a hosted PostgreSQL database for Streamlit Cloud so the data persists across app restarts and redeployments.
 
 ### 1. Create a Supabase project
 
@@ -113,9 +115,11 @@ DATABASE_URL = "postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.
 
 ### 4. Notes
 
-- SQLite is fine for local development.
-- PostgreSQL is recommended for production and shared use.
-- The app automatically uses PostgreSQL when `DATABASE_URL` is configured.
+- The application currently uses PostgreSQL for project and pre-test change data.
+- A local `pretest_changes.db` SQLite file is not required or used.
+- Configure `DATABASE_URL` or `POSTGRES_URL` before starting the application.
+- The `psycopg` PostgreSQL driver is installed from `requirements.txt`.
+- The database tables are created automatically by the application during startup.
 
 ## 🔄 Example Workflow
 
